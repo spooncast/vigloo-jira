@@ -216,16 +216,63 @@ fn render_subtasks(frame: &mut Frame, app: &App, area: Rect) {
 // -- Scrum mode (D layout: date tabs on top + full-width table) --
 
 fn render_scrum_body(frame: &mut Frame, app: &App, area: Rect) {
+    let has_action = app.today_scrum().and_then(|d| d.my_comment.as_ref()).is_some()
+        && app.tomorrow_scrum().map(|d| !d.key.is_empty()).unwrap_or(false);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // date tabs
-            Constraint::Min(0),   // comment table
+            Constraint::Length(3),                          // date tabs
+            Constraint::Min(0),                            // comment table
+            Constraint::Length(if has_action { 3 } else { 0 }), // action bar
         ])
         .split(area);
 
     render_scrum_date_tabs(frame, app, chunks[0]);
     render_scrum_comment(frame, app, chunks[1]);
+
+    if has_action {
+        render_scrum_action_bar(frame, app, chunks[2]);
+    }
+}
+
+fn render_scrum_action_bar(frame: &mut Frame, app: &App, area: Rect) {
+    let (msg, style) = if app.confirm_write {
+        (
+            " 오늘의 '오늘 할 것'을 내일 스크럼에 작성합니다. 확인: Enter / 취소: Esc ",
+            Style::default().fg(Color::White).bg(Color::Red).add_modifier(Modifier::BOLD),
+        )
+    } else {
+        let tomorrow = app.tomorrow_scrum().map(|d| d.date.as_str()).unwrap_or("");
+        (
+            "",
+            Style::default(),
+        );
+        let line = Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                " w ",
+                Style::default().fg(Color::White).bg(Color::Green).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("오늘의 '오늘 할 것' → 내일({}) 스크럼에 작성", &tomorrow[5..]),
+                Style::default().fg(Color::White),
+            ),
+        ]);
+        let bar = Paragraph::new(line).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green)),
+        );
+        frame.render_widget(bar, area);
+        return;
+    };
+
+    let bar = Paragraph::new(msg)
+        .style(style)
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Red)));
+    frame.render_widget(bar, area);
 }
 
 fn render_scrum_date_tabs(frame: &mut Frame, app: &App, area: Rect) {
@@ -362,8 +409,6 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         Mode::Scrum => {
             spans.push(Span::styled("←→", Style::default().fg(Color::Cyan)));
             spans.push(Span::raw(": Day  "));
-            spans.push(Span::styled("w", Style::default().fg(Color::Green)));
-            spans.push(Span::raw(": Write Tomorrow  "));
             spans.push(Span::styled("1", Style::default().fg(Color::Yellow)));
             spans.push(Span::raw(": Sprint  "));
         }

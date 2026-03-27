@@ -31,6 +31,21 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
             if key.kind != KeyEventKind::Press {
                 return Ok(AppEvent::None);
             }
+
+            // Confirm mode: only Enter or Esc
+            if app.confirm_write {
+                match key.code {
+                    KeyCode::Enter => {
+                        app.confirm_write = false;
+                        return Ok(AppEvent::WriteScrum);
+                    }
+                    _ => {
+                        app.confirm_write = false;
+                        return Ok(AppEvent::None);
+                    }
+                }
+            }
+
             match key.code {
                 KeyCode::Char('q') => return Ok(AppEvent::Quit),
                 KeyCode::Char('r') => return Ok(AppEvent::Refresh),
@@ -51,7 +66,7 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
                 KeyCode::Tab => app.toggle_panel(),
                 KeyCode::Char('w') => {
                     if app.mode == Mode::Scrum {
-                        return Ok(AppEvent::WriteScrum);
+                        app.confirm_write = true;
                     }
                 }
                 KeyCode::Esc => app.go_back(),

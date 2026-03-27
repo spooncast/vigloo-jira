@@ -31,6 +31,7 @@ pub struct App {
     pub scrum_days: Vec<ScrumDay>,
     pub selected_scrum_day: usize,
     pub scrum_scroll: u16,
+    pub confirm_write: bool,
 }
 
 impl App {
@@ -49,6 +50,7 @@ impl App {
             scrum_days: Vec::new(),
             selected_scrum_day: 0,
             scrum_scroll: 0,
+            confirm_write: false,
         }
     }
 
