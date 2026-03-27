@@ -143,6 +143,7 @@ pub struct ScrumComment {
     pub author: String,
     pub created: String,
     pub table: ScrumTable,
+    pub raw_body: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,7 +158,77 @@ impl ScrumComment {
             author: raw.author.display_name.clone(),
             created: raw.created[..16].to_string(),
             table: extract_adf_table(&raw.body),
+            raw_body: raw.body.clone(),
         }
+    }
+
+    /// Extract the raw ADF content of a specific column (0-indexed) from the table's data row.
+    pub fn raw_column_content(&self, col_idx: usize) -> Option<serde_json::Value> {
+        let content = self.raw_body.get("content")?.as_array()?;
+        let table_node = content.iter().find(|n| {
+            n.get("type").and_then(|t| t.as_str()) == Some("table")
+        })?;
+        let rows = table_node.get("content")?.as_array()?;
+        // Row 0 is header, row 1+ is data
+        let data_row = rows.get(1)?;
+        let cells = data_row.get("content")?.as_array()?;
+        let cell = cells.get(col_idx)?;
+        // Return the cell's content array (the inner nodes)
+        Some(cell.get("content").cloned().unwrap_or(serde_json::Value::Array(vec![])))
+    }
+
+    /// Build an ADF comment for tomorrow: today's "오늘 할 것" becomes "한 것(어제 한 것)"
+    pub fn build_tomorrow_adf(&self) -> Option<serde_json::Value> {
+        // Column 1 = "오늘 할 것"
+        let today_todo_content = self.raw_column_content(1)?;
+
+        let empty_cell_content = serde_json::json!([
+            {"type": "paragraph", "content": [{"type": "text", "text": " "}]}
+        ]);
+
+        // Extract original headers from raw ADF
+        let content = self.raw_body.get("content")?.as_array()?;
+        let table_node = content.iter().find(|n| {
+            n.get("type").and_then(|t| t.as_str()) == Some("table")
+        })?;
+        let rows = table_node.get("content")?.as_array()?;
+        let header_row = rows.first()?.clone();
+
+        let adf = serde_json::json!({
+            "version": 1,
+            "type": "doc",
+            "content": [
+                {
+                    "type": "table",
+                    "attrs": {"isNumberColumnEnabled": false, "layout": "default"},
+                    "content": [
+                        header_row,
+                        {
+                            "type": "tableRow",
+                            "content": [
+                                {
+                                    "type": "tableCell",
+                                    "attrs": {},
+                                    "content": today_todo_content
+                                },
+                                {
+                                    "type": "tableCell",
+                                    "attrs": {},
+                                    "content": empty_cell_content
+                                },
+                                {
+                                    "type": "tableCell",
+                                    "attrs": {},
+                                    "content": empty_cell_content
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        Some(adf)
     }
 }
 

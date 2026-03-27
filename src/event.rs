@@ -8,6 +8,7 @@ pub enum AppEvent {
     Refresh,
     OpenLink(String),
     SwitchMode(Mode),
+    WriteScrum,
     None,
 }
 
@@ -48,6 +49,11 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
                 KeyCode::Left => app.move_left(),
                 KeyCode::Right => app.move_right(),
                 KeyCode::Tab => app.toggle_panel(),
+                KeyCode::Char('w') => {
+                    if app.mode == Mode::Scrum {
+                        return Ok(AppEvent::WriteScrum);
+                    }
+                }
                 KeyCode::Esc => app.go_back(),
                 KeyCode::Enter => {
                     if let Some(event) = app.handle_enter() {

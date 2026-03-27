@@ -92,6 +92,14 @@ impl App {
             .and_then(|d| d.my_comment.as_ref())
     }
 
+    pub fn today_scrum(&self) -> Option<&crate::model::ScrumDay> {
+        self.scrum_days.iter().find(|d| d.label == "오늘")
+    }
+
+    pub fn tomorrow_scrum(&self) -> Option<&crate::model::ScrumDay> {
+        self.scrum_days.iter().find(|d| d.label == "내일")
+    }
+
     pub fn move_up(&mut self) {
         match self.mode {
             Mode::Sprint => match self.active_panel {

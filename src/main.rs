@@ -101,6 +101,48 @@ async fn run_app(
             AppEvent::OpenLink(url) => {
                 let _ = open::that(&url);
             }
+            AppEvent::WriteScrum => {
+                // Get today's comment and tomorrow's issue key
+                let today_comment = app.today_scrum().and_then(|d| d.my_comment.as_ref());
+                let tomorrow_key = app.tomorrow_scrum().map(|d| d.key.clone());
+
+                match (today_comment, tomorrow_key) {
+                    (Some(comment), Some(key)) if !key.is_empty() => {
+                        if let Some(adf) = comment.build_tomorrow_adf() {
+                            let c = client.clone();
+                            let tx2 = tx.clone();
+                            app.loading = true;
+                            tokio::spawn(async move {
+                                match c.create_comment(&key, &adf).await {
+                                    Ok(()) => {
+                                        // Refresh scrum data after writing
+                                        let payload = match c.fetch_scrum_data(true).await {
+                                            Ok((days, warnings)) => {
+                                                DataPayload::Scrum { days, warnings }
+                                            }
+                                            Err(e) => DataPayload::Error(format!("{:#}", e)),
+                                        };
+                                        let _ = tx2.send(payload);
+                                    }
+                                    Err(e) => {
+                                        let _ = tx2.send(DataPayload::Error(
+                                            format!("Failed to write scrum: {:#}", e),
+                                        ));
+                                    }
+                                }
+                            });
+                        } else {
+                            app.set_error("오늘 코멘트에서 테이블을 찾을 수 없습니다".to_string());
+                        }
+                    }
+                    (None, _) => {
+                        app.set_error("오늘 스크럼 코멘트가 없습니다".to_string());
+                    }
+                    (_, None) | (_, Some(_)) => {
+                        app.set_error("내일 스크럼 이슈를 찾을 수 없습니다".to_string());
+                    }
+                }
+            }
             AppEvent::None => {}
         }
     }

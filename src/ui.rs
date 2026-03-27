@@ -362,6 +362,8 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         Mode::Scrum => {
             spans.push(Span::styled("←→", Style::default().fg(Color::Cyan)));
             spans.push(Span::raw(": Day  "));
+            spans.push(Span::styled("w", Style::default().fg(Color::Green)));
+            spans.push(Span::raw(": Write Tomorrow  "));
             spans.push(Span::styled("1", Style::default().fg(Color::Yellow)));
             spans.push(Span::raw(": Sprint  "));
         }

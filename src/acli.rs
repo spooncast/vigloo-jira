@@ -364,4 +364,24 @@ impl AcliClient {
         let _ = cache::save_scrum_data_cache(&self.project, &days, &warnings);
         Ok((days, warnings))
     }
+
+    pub async fn create_comment(&self, issue_key: &str, adf_body: &serde_json::Value) -> Result<()> {
+        let body_str = serde_json::to_string(adf_body)?;
+        let output = Command::new("acli")
+            .args([
+                "jira", "workitem", "comment", "create",
+                "--key", issue_key,
+                "--body", &body_str,
+            ])
+            .output()
+            .await
+            .context("Failed to run acli comment create")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Comment create failed for {}: {}", issue_key, stderr);
+        }
+
+        Ok(())
+    }
 }
