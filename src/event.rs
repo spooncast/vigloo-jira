@@ -45,6 +45,8 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
                 }
                 KeyCode::Up => app.move_up(),
                 KeyCode::Down => app.move_down(),
+                KeyCode::Left => app.move_left(),
+                KeyCode::Right => app.move_right(),
                 KeyCode::Tab => app.toggle_panel(),
                 KeyCode::Esc => app.go_back(),
                 KeyCode::Enter => {

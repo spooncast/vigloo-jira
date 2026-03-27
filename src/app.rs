@@ -107,19 +107,11 @@ impl App {
                     }
                 }
             },
-            Mode::Scrum => match self.active_panel {
-                Panel::Left => {
-                    if self.selected_scrum_day > 0 {
-                        self.selected_scrum_day -= 1;
-                        self.scrum_scroll = 0;
-                    }
+            Mode::Scrum => {
+                if self.scrum_scroll > 0 {
+                    self.scrum_scroll -= 1;
                 }
-                Panel::Right => {
-                    if self.scrum_scroll > 0 {
-                        self.scrum_scroll -= 1;
-                    }
-                }
-            },
+            }
         }
     }
 
@@ -139,30 +131,45 @@ impl App {
                     }
                 }
             },
-            Mode::Scrum => match self.active_panel {
-                Panel::Left => {
-                    if self.selected_scrum_day + 1 < self.scrum_days.len() {
-                        self.selected_scrum_day += 1;
-                        self.scrum_scroll = 0;
-                    }
-                }
-                Panel::Right => {
-                    self.scrum_scroll += 1;
-                }
-            },
+            Mode::Scrum => {
+                self.scrum_scroll += 1;
+            }
+        }
+    }
+
+    pub fn move_left(&mut self) {
+        if self.mode == Mode::Scrum && self.selected_scrum_day > 0 {
+            self.selected_scrum_day -= 1;
+            self.scrum_scroll = 0;
+        }
+    }
+
+    pub fn move_right(&mut self) {
+        if self.mode == Mode::Scrum && self.selected_scrum_day + 1 < self.scrum_days.len() {
+            self.selected_scrum_day += 1;
+            self.scrum_scroll = 0;
         }
     }
 
     pub fn toggle_panel(&mut self) {
-        self.active_panel = match self.active_panel {
-            Panel::Left => Panel::Right,
-            Panel::Right => Panel::Left,
-        };
+        if self.mode == Mode::Sprint {
+            self.active_panel = match self.active_panel {
+                Panel::Left => Panel::Right,
+                Panel::Right => Panel::Left,
+            };
+        }
     }
 
     pub fn go_back(&mut self) {
-        if self.active_panel == Panel::Right {
-            self.active_panel = Panel::Left;
+        match self.mode {
+            Mode::Sprint => {
+                if self.active_panel == Panel::Right {
+                    self.active_panel = Panel::Left;
+                }
+            }
+            Mode::Scrum => {
+                // no panel navigation in scrum mode
+            }
         }
     }
 
@@ -171,7 +178,7 @@ impl App {
             self.mode = mode;
             self.active_panel = Panel::Left;
             self.error = None;
-            true // needs data reload
+            true
         } else {
             false
         }
@@ -194,27 +201,18 @@ impl App {
                     })
                 }
             },
-            Mode::Scrum => match self.active_panel {
-                Panel::Left => {
-                    if self.current_scrum_comment().is_some() {
-                        self.active_panel = Panel::Right;
-                        self.scrum_scroll = 0;
+            Mode::Scrum => {
+                // Enter opens the scrum day in browser
+                self.scrum_days.get(self.selected_scrum_day).and_then(|day| {
+                    if day.key.is_empty() {
+                        None
+                    } else {
+                        Some(crate::event::AppEvent::OpenLink(
+                            format!("{}/browse/{}", self.jira_host, day.key),
+                        ))
                     }
-                    None
-                }
-                Panel::Right => {
-                    // Open scrum day in browser
-                    self.scrum_days.get(self.selected_scrum_day).and_then(|day| {
-                        if day.key.is_empty() {
-                            None
-                        } else {
-                            Some(crate::event::AppEvent::OpenLink(
-                                format!("{}/browse/{}", self.jira_host, day.key),
-                            ))
-                        }
-                    })
-                }
-            },
+                })
+            }
         }
     }
 }

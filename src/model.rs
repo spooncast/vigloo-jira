@@ -218,58 +218,140 @@ fn extract_cell_text(cell: &serde_json::Value) -> String {
     };
 
     let mut lines = Vec::new();
-    for node in content {
+    extract_block_nodes(content, &mut lines, 0);
+    lines.join("\n")
+}
+
+fn extract_block_nodes(nodes: &[serde_json::Value], lines: &mut Vec<String>, depth: usize) {
+    let indent = "  ".repeat(depth);
+    for node in nodes {
         let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
         match node_type {
             "paragraph" => {
                 let text = extract_inline_text(node);
-                if !text.is_empty() && text != "\u{a0}" {
-                    lines.push(text);
+                if !text.is_empty() && text.trim() != "\u{a0}" && text.trim() != "" {
+                    lines.push(format!("{}{}", indent, text));
                 }
             }
             "bulletList" | "orderedList" => {
                 if let Some(items) = node.get("content").and_then(|c| c.as_array()) {
                     for item in items {
-                        let text = extract_adf_text_flat(item);
-                        if !text.is_empty() && text != "\u{a0}" {
-                            lines.push(format!("• {}", text));
-                        }
+                        extract_list_item(item, lines, depth);
                     }
                 }
             }
+            "listItem" => {
+                extract_list_item(node, lines, depth);
+            }
             _ => {
                 let text = extract_adf_text_flat(node);
-                if !text.is_empty() && text != "\u{a0}" {
-                    lines.push(text);
+                if !text.is_empty() && text.trim() != "\u{a0}" && text.trim() != "" {
+                    lines.push(format!("{}{}", indent, text));
                 }
             }
         }
     }
-    lines.join("\n")
+}
+
+fn extract_list_item(item: &serde_json::Value, lines: &mut Vec<String>, depth: usize) {
+    let indent = "  ".repeat(depth);
+    let children = match item.get("content").and_then(|c| c.as_array()) {
+        Some(c) => c,
+        None => return,
+    };
+
+    // A listItem can contain: paragraph(s) and nested bulletList/orderedList
+    let mut item_text_parts = Vec::new();
+    let mut nested_nodes = Vec::new();
+
+    for child in children {
+        let child_type = child.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        match child_type {
+            "paragraph" => {
+                let text = extract_inline_text(child);
+                if !text.is_empty() && text.trim() != "\u{a0}" && text.trim() != "" {
+                    item_text_parts.push(text);
+                }
+            }
+            "bulletList" | "orderedList" => {
+                nested_nodes.push(child);
+            }
+            _ => {
+                let text = extract_adf_text_flat(child);
+                if !text.is_empty() && text.trim() != "\u{a0}" && text.trim() != "" {
+                    item_text_parts.push(text);
+                }
+            }
+        }
+    }
+
+    // Push the list item's own text
+    if !item_text_parts.is_empty() {
+        let combined = item_text_parts.join(" ");
+        lines.push(format!("{}• {}", indent, combined));
+    }
+
+    // Process nested lists with increased depth
+    for nested in nested_nodes {
+        if let Some(items) = nested.get("content").and_then(|c| c.as_array()) {
+            for sub_item in items {
+                extract_list_item(sub_item, lines, depth + 1);
+            }
+        }
+    }
 }
 
 fn extract_inline_text(node: &serde_json::Value) -> String {
+    let content = match node.get("content").and_then(|c| c.as_array()) {
+        Some(c) => c,
+        None => return String::new(),
+    };
+
+    // Check if this paragraph contains only inlineCard(s) and no meaningful text
+    let has_meaningful_text = content.iter().any(|item| {
+        if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+            item.get("text")
+                .and_then(|t| t.as_str())
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    });
+    let only_cards = !has_meaningful_text
+        && content.iter().any(|item| {
+            item.get("type").and_then(|t| t.as_str()) == Some("inlineCard")
+        });
+
     let mut parts = Vec::new();
-    if let Some(content) = node.get("content").and_then(|c| c.as_array()) {
-        for item in content {
-            let item_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
-            match item_type {
-                "text" => {
-                    if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                        parts.push(text.to_string());
-                    }
+    for item in content {
+        let item_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        match item_type {
+            "text" => {
+                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                    parts.push(text.to_string());
                 }
-                "inlineCard" => {
-                    if let Some(url) = item.get("attrs").and_then(|a| a.get("url")).and_then(|u| u.as_str()) {
-                        if let Some(key) = url.split("/browse/").last() {
-                            parts.push(key.to_string());
-                        } else {
-                            parts.push(url.to_string());
-                        }
-                    }
-                }
-                _ => {}
             }
+            "inlineCard" => {
+                if let Some(url) = item
+                    .get("attrs")
+                    .and_then(|a| a.get("url"))
+                    .and_then(|u| u.as_str())
+                {
+                    if only_cards {
+                        // Show full URL when no surrounding text
+                        parts.push(url.split('?').next().unwrap_or(url).to_string());
+                    } else if url.contains("/browse/") {
+                        // Extract Jira key, strip query string
+                        let after_browse = url.split("/browse/").last().unwrap_or(url);
+                        let key = after_browse.split('?').next().unwrap_or(after_browse);
+                        parts.push(key.to_string());
+                    } else {
+                        parts.push(url.split('?').next().unwrap_or(url).to_string());
+                    }
+                }
+            }
+            _ => {}
         }
     }
     parts.join("")
