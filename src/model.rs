@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // -- acli response wrappers --
 
@@ -50,6 +50,7 @@ pub struct StatusField {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssigneeField {
+    pub account_id: String,
     pub display_name: String,
 }
 
@@ -63,9 +64,41 @@ pub struct PriorityField {
     pub name: String,
 }
 
+// -- comment JSON shapes --
+
+#[derive(Debug, Deserialize)]
+pub struct CommentViewResponse {
+    pub fields: CommentViewFields,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CommentViewFields {
+    pub comment: CommentWrapper,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CommentWrapper {
+    pub comments: Vec<CommentRaw>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentRaw {
+    pub author: CommentAuthor,
+    pub body: serde_json::Value,
+    pub created: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentAuthor {
+    pub account_id: String,
+    pub display_name: String,
+}
+
 // -- domain models --
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sprint {
     pub id: u64,
     pub name: String,
@@ -74,7 +107,7 @@ pub struct Sprint {
     pub end_date: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkItem {
     pub key: String,
     pub summary: String,
@@ -85,13 +118,182 @@ pub struct WorkItem {
     pub subtasks: Vec<Subtask>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subtask {
     pub key: String,
     pub summary: String,
     pub status: String,
     pub assignee: String,
     pub priority: String,
+}
+
+// -- scrum domain models --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrumDay {
+    pub key: String,
+    pub label: String, // "오늘 (03-26)" or "어제 (03-25)"
+    pub date: String,  // "2026-03-26"
+    pub status: String,
+    pub my_comment: Option<ScrumComment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrumComment {
+    pub author: String,
+    pub created: String,
+    pub table: ScrumTable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrumTable {
+    pub headers: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+impl ScrumComment {
+    pub fn from_raw(raw: &CommentRaw) -> Self {
+        Self {
+            author: raw.author.display_name.clone(),
+            created: raw.created[..16].to_string(),
+            table: extract_adf_table(&raw.body),
+        }
+    }
+}
+
+fn extract_adf_table(body: &serde_json::Value) -> ScrumTable {
+    let empty = ScrumTable {
+        headers: Vec::new(),
+        rows: Vec::new(),
+    };
+
+    let content = match body.get("content").and_then(|c| c.as_array()) {
+        Some(c) => c,
+        None => return empty,
+    };
+
+    // Find first table node
+    let table_node = match content.iter().find(|n| {
+        n.get("type").and_then(|t| t.as_str()) == Some("table")
+    }) {
+        Some(t) => t,
+        None => {
+            // No table — fallback to plain text
+            let text = extract_adf_text_flat(body);
+            return ScrumTable {
+                headers: vec!["Content".to_string()],
+                rows: vec![vec![text]],
+            };
+        }
+    };
+
+    let table_rows = match table_node.get("content").and_then(|c| c.as_array()) {
+        Some(r) => r,
+        None => return empty,
+    };
+
+    let mut headers = Vec::new();
+    let mut rows = Vec::new();
+
+    for (i, row) in table_rows.iter().enumerate() {
+        let cells = match row.get("content").and_then(|c| c.as_array()) {
+            Some(c) => c,
+            None => continue,
+        };
+        let cell_texts: Vec<String> = cells.iter().map(|cell| extract_cell_text(cell)).collect();
+        if i == 0 {
+            headers = cell_texts;
+        } else {
+            rows.push(cell_texts);
+        }
+    }
+
+    ScrumTable { headers, rows }
+}
+
+fn extract_cell_text(cell: &serde_json::Value) -> String {
+    let content = match cell.get("content").and_then(|c| c.as_array()) {
+        Some(c) => c,
+        None => return String::new(),
+    };
+
+    let mut lines = Vec::new();
+    for node in content {
+        let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        match node_type {
+            "paragraph" => {
+                let text = extract_inline_text(node);
+                if !text.is_empty() && text != "\u{a0}" {
+                    lines.push(text);
+                }
+            }
+            "bulletList" | "orderedList" => {
+                if let Some(items) = node.get("content").and_then(|c| c.as_array()) {
+                    for item in items {
+                        let text = extract_adf_text_flat(item);
+                        if !text.is_empty() && text != "\u{a0}" {
+                            lines.push(format!("• {}", text));
+                        }
+                    }
+                }
+            }
+            _ => {
+                let text = extract_adf_text_flat(node);
+                if !text.is_empty() && text != "\u{a0}" {
+                    lines.push(text);
+                }
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+fn extract_inline_text(node: &serde_json::Value) -> String {
+    let mut parts = Vec::new();
+    if let Some(content) = node.get("content").and_then(|c| c.as_array()) {
+        for item in content {
+            let item_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            match item_type {
+                "text" => {
+                    if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                        parts.push(text.to_string());
+                    }
+                }
+                "inlineCard" => {
+                    if let Some(url) = item.get("attrs").and_then(|a| a.get("url")).and_then(|u| u.as_str()) {
+                        if let Some(key) = url.split("/browse/").last() {
+                            parts.push(key.to_string());
+                        } else {
+                            parts.push(url.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    parts.join("")
+}
+
+fn extract_adf_text_flat(node: &serde_json::Value) -> String {
+    let mut texts = Vec::new();
+    extract_adf_text_recursive(node, &mut texts);
+    texts.join("")
+}
+
+fn extract_adf_text_recursive(node: &serde_json::Value, texts: &mut Vec<String>) {
+    if let Some(obj) = node.as_object() {
+        if obj.get("type").and_then(|t| t.as_str()) == Some("text") {
+            if let Some(text) = obj.get("text").and_then(|t| t.as_str()) {
+                texts.push(text.to_string());
+            }
+        }
+        if let Some(content) = obj.get("content").and_then(|c| c.as_array()) {
+            for child in content {
+                extract_adf_text_recursive(child, texts);
+            }
+        }
+    }
 }
 
 // -- conversions --

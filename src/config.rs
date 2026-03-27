@@ -15,6 +15,8 @@ pub struct JiraConfig {
     pub board_id: u64,
     #[serde(default = "default_host")]
     pub host: String,
+    #[serde(default = "default_project")]
+    pub project: String,
 }
 
 fn default_board_id() -> u64 {
@@ -25,10 +27,15 @@ fn default_host() -> String {
     "https://spoonradio.atlassian.net".to_string()
 }
 
+fn default_project() -> String {
+    "CLIP".to_string()
+}
+
 fn default_jira() -> JiraConfig {
     JiraConfig {
         board_id: default_board_id(),
         host: default_host(),
+        project: default_project(),
     }
 }
 

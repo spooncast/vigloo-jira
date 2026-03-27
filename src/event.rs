@@ -1,12 +1,27 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 
-use crate::app::App;
+use crate::app::{App, Mode};
+use crate::model::{ScrumDay, Sprint, WorkItem};
 
 pub enum AppEvent {
     Quit,
     Refresh,
     OpenLink(String),
+    SwitchMode(Mode),
     None,
+}
+
+pub enum DataPayload {
+    Sprint {
+        sprint: Sprint,
+        work_items: Vec<WorkItem>,
+        warnings: Vec<String>,
+    },
+    Scrum {
+        days: Vec<ScrumDay>,
+        warnings: Vec<String>,
+    },
+    Error(String),
 }
 
 pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
@@ -18,6 +33,16 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
             match key.code {
                 KeyCode::Char('q') => return Ok(AppEvent::Quit),
                 KeyCode::Char('r') => return Ok(AppEvent::Refresh),
+                KeyCode::Char('1') => {
+                    if app.switch_mode(Mode::Sprint) {
+                        return Ok(AppEvent::SwitchMode(Mode::Sprint));
+                    }
+                }
+                KeyCode::Char('2') => {
+                    if app.switch_mode(Mode::Scrum) {
+                        return Ok(AppEvent::SwitchMode(Mode::Scrum));
+                    }
+                }
                 KeyCode::Up => app.move_up(),
                 KeyCode::Down => app.move_down(),
                 KeyCode::Tab => app.toggle_panel(),
