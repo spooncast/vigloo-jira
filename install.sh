@@ -40,3 +40,15 @@ echo "Installing to ${INSTALL_DIR}/${BINARY_NAME}..."
 sudo mv "/tmp/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
 
 echo "Done! Run 'vj' to start."
+
+# Check acli
+if ! command -v acli &> /dev/null; then
+    echo ""
+    echo "⚠ acli (Atlassian CLI) is not installed."
+    echo "  Install: https://developer.atlassian.com/cloud/acli/"
+    echo "  After install, run: acli auth login"
+elif ! acli auth status &> /dev/null; then
+    echo ""
+    echo "⚠ acli is installed but not authenticated."
+    echo "  Run: acli auth login"
+fi
