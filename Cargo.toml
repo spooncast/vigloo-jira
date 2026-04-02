@@ -1,6 +1,6 @@
 [package]
 name = "vigloo-jira"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [[bin]]
@@ -18,3 +18,4 @@ dirs = "6"
 anyhow = "1"
 chrono = "0.4"
 open = "5"
+clap = { version = "4", features = ["derive"] }

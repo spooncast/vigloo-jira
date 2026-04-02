@@ -1,6 +1,7 @@
 mod acli;
 mod app;
 mod cache;
+mod cli;
 mod config;
 mod event;
 mod model;
@@ -12,6 +13,7 @@ use config::Config;
 use event::{handle_events, AppEvent, DataPayload};
 
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -21,12 +23,57 @@ use std::io;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+#[derive(Parser)]
+#[command(name = "vj", version, about = "Vigloo Jira TUI & CLI")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// 활성 스프린트 작업 항목 조회
+    Sprint {
+        #[arg(long)]
+        json: bool,
+    },
+    /// 스크럼 데이(어제/오늘/내일) 조회
+    Scrum {
+        #[arg(long)]
+        json: bool,
+    },
+    /// 내일 스크럼 코멘트 작성
+    Write,
+    /// Jira 이슈를 브라우저에서 열기
+    Open {
+        /// sprint 또는 scrum (기본: sprint)
+        #[arg(default_value = "sprint")]
+        mode: String,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Cli::parse();
     let config = Config::load()?;
-    let client = Arc::new(AcliClient::new(config.jira.board_id, config.jira.project));
+    let client = Arc::new(AcliClient::new(config.jira.board_id, config.jira.project.clone()));
 
-    // Install panic hook to restore terminal on panic
+    // CLI subcommand mode
+    if let Some(command) = args.command {
+        let result = match command {
+            Commands::Sprint { json } => cli::cmd_sprint(&client, &config.jira.host, json).await,
+            Commands::Scrum { json } => cli::cmd_scrum(&client, json).await,
+            Commands::Write => cli::cmd_write(&client).await,
+            Commands::Open { mode } => cli::cmd_open(&client, &config.jira.host, &mode).await,
+        };
+        if let Err(e) = result {
+            eprintln!("Error: {:#}", e);
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    // TUI mode (no subcommand)
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
         let _ = disable_raw_mode();
@@ -34,7 +81,6 @@ async fn main() -> Result<()> {
         original_hook(panic_info);
     }));
 
-    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -43,7 +89,6 @@ async fn main() -> Result<()> {
 
     let result = run_app(&mut terminal, client, &config.jira.host).await;
 
-    // Restore terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
