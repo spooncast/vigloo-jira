@@ -66,7 +66,7 @@ impl App {
 
     pub fn set_scrum_data(&mut self, days: Vec<ScrumDay>) {
         self.scrum_days = days;
-        self.selected_scrum_day = 0;
+        self.selected_scrum_day = 1;
         self.scrum_scroll = 0;
         self.loading = false;
         self.error = None;

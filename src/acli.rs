@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use tokio::process::Command;
 use tokio::sync::OnceCell;
 
@@ -236,15 +236,15 @@ impl AcliClient {
             .args(["jira", "workitem", "search", "--jql", &jql, "--json"])
             .output()
             .await
-            .context("Failed to search scrum day")?;
+            .context(format!("{} ({}) 스크럼 데이 검색 실행 실패", label, date_str))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Scrum day search failed: {}", stderr);
+            anyhow::bail!("{} ({}) 스크럼 데이 검색 실패: {}", label, date_str, stderr);
         }
 
         let issues: Vec<IssueRaw> = serde_json::from_slice(&output.stdout)
-            .context("Failed to parse scrum day response")?;
+            .context(format!("{} ({}) 스크럼 데이 응답 파싱 실패", label, date_str))?;
 
         match issues.first() {
             Some(issue) => Ok(ScrumDay {
@@ -308,11 +308,12 @@ impl AcliClient {
         let (epic_key, account_id) = tokio::try_join!(
             self.find_scrum_epic_cached(),
             self.fetch_current_user_account_id_cached(),
-        )?;
+        )
+        .context("Epic key 또는 Account ID 조회 실패")?;
 
         let today = Local::now().date_naive();
-        let yesterday = today.pred_opt().unwrap_or(today);
-        let tomorrow = today.succ_opt().unwrap_or(today);
+        let yesterday = prev_workday(today);
+        let tomorrow = next_workday(today);
 
         // Parallel: fetch all three scrum days
         let (tomorrow_result, today_result, yesterday_result) = tokio::join!(
@@ -321,9 +322,9 @@ impl AcliClient {
             self.fetch_scrum_day(&epic_key, yesterday, "어제"),
         );
 
-        let mut tomorrow_scrum = tomorrow_result?;
-        let mut today_scrum = today_result?;
-        let mut yesterday_scrum = yesterday_result?;
+        let mut tomorrow_scrum = tomorrow_result.context("내일 스크럼 데이 조회 실패")?;
+        let mut today_scrum = today_result.context("오늘 스크럼 데이 조회 실패")?;
+        let mut yesterday_scrum = yesterday_result.context("어제 스크럼 데이 조회 실패")?;
 
         // Parallel: fetch comments
         let tomorrow_key = tomorrow_scrum.key.clone();
@@ -383,5 +384,21 @@ impl AcliClient {
         }
 
         Ok(())
+    }
+}
+
+fn prev_workday(date: NaiveDate) -> NaiveDate {
+    match date.weekday() {
+        Weekday::Mon => date - Days::new(3),
+        Weekday::Sun => date - Days::new(2),
+        _ => date - Days::new(1),
+    }
+}
+
+fn next_workday(date: NaiveDate) -> NaiveDate {
+    match date.weekday() {
+        Weekday::Fri => date + Days::new(3),
+        Weekday::Sat => date + Days::new(2),
+        _ => date + Days::new(1),
     }
 }
