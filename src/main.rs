@@ -50,6 +50,8 @@ enum Commands {
         #[arg(default_value = "sprint")]
         mode: String,
     },
+    /// 최신 버전으로 업데이트
+    Update,
 }
 
 #[tokio::main]
@@ -65,6 +67,7 @@ async fn main() -> Result<()> {
             Commands::Scrum { json } => cli::cmd_scrum(&client, json).await,
             Commands::Write => cli::cmd_write(&client).await,
             Commands::Open { mode } => cli::cmd_open(&client, &config.jira.host, &mode).await,
+            Commands::Update => cli::cmd_update().await,
         };
         if let Err(e) = result {
             eprintln!("Error: {:#}", e);

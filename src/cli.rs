@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::{Context, Result};
 
 use crate::acli::AcliClient;
@@ -164,4 +166,83 @@ pub async fn cmd_open(client: &AcliClient, host: &str, mode: &str) -> Result<()>
     }
 
     Ok(())
+}
+
+pub async fn cmd_update() -> Result<()> {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let repo = "spooncast/vigloo-jira";
+
+    // Fetch latest version tag from GitHub API
+    println!("최신 버전 확인 중...");
+    let output = Command::new("curl")
+        .args(["-fsSL", &format!("https://api.github.com/repos/{}/releases/latest", repo)])
+        .output()
+        .context("GitHub API 호출 실패")?;
+
+    if !output.status.success() {
+        anyhow::bail!("GitHub에서 최신 릴리스 정보를 가져올 수 없습니다");
+    }
+
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .context("릴리스 정보 파싱 실패")?;
+    let latest_tag = response["tag_name"]
+        .as_str()
+        .context("tag_name을 찾을 수 없습니다")?;
+    let latest_version = latest_tag.strip_prefix('v').unwrap_or(latest_tag);
+
+    if latest_version == current_version {
+        println!("이미 최신 버전입니다. (v{})", current_version);
+        return Ok(());
+    }
+
+    println!("v{} -> v{} 업데이트 중...", current_version, latest_version);
+
+    // Detect platform asset name
+    let asset = detect_asset_name()?;
+    let download_url = format!("https://github.com/{}/releases/latest/download/{}", repo, asset);
+
+    // Download to temp file
+    let tmp_path = "/tmp/vj_update";
+    let status = Command::new("curl")
+        .args(["-fsSL", &download_url, "-o", tmp_path])
+        .status()
+        .context("바이너리 다운로드 실패")?;
+
+    if !status.success() {
+        anyhow::bail!("바이너리 다운로드 실패: {}", download_url);
+    }
+
+    // Make executable
+    Command::new("chmod")
+        .args(["+x", tmp_path])
+        .status()
+        .context("chmod 실패")?;
+
+    // Replace current binary
+    let current_exe = std::env::current_exe().context("현재 실행 파일 경로를 알 수 없습니다")?;
+    let install_path = current_exe.to_string_lossy();
+
+    let status = Command::new("sudo")
+        .args(["mv", tmp_path, &install_path])
+        .status()
+        .context("바이너리 교체 실패 (sudo 권한 필요)")?;
+
+    if !status.success() {
+        anyhow::bail!("바이너리 교체 실패");
+    }
+
+    println!("v{} 업데이트 완료!", latest_version);
+    Ok(())
+}
+
+fn detect_asset_name() -> Result<String> {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    match (os, arch) {
+        ("macos", "aarch64") => Ok("vj-darwin-arm64".to_string()),
+        ("macos", "x86_64") => Ok("vj-darwin-x86_64".to_string()),
+        ("linux", "x86_64") => Ok("vj-linux-x86_64".to_string()),
+        _ => anyhow::bail!("지원하지 않는 플랫폼: {} {}", os, arch),
+    }
 }
