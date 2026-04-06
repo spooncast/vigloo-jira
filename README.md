@@ -34,7 +34,8 @@ vj sprint          # 스프린트 작업 목록 출력
 vj sprint --json   # JSON 형식으로 출력
 vj scrum           # 스크럼 데이(어제/오늘/내일) 상태 출력
 vj scrum --json    # JSON 형식으로 출력
-vj write           # 내일 스크럼 코멘트 자동 작성
+vj write           # 내일 스크럼 코멘트 자동 작성 (오늘 할 것 → 내일 한 것)
+vj write today     # 오늘 스크럼 코멘트 자동 작성 (어제 할 것 → 오늘 한 것)
 vj open            # 활성 스프린트 보드를 브라우저에서 열기
 vj open scrum      # 오늘 스크럼 이슈를 브라우저에서 열기
 vj update          # 최신 버전으로 셀프 업데이트

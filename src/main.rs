@@ -42,8 +42,12 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// 내일 스크럼 코멘트 작성
-    Write,
+    /// 스크럼 코멘트 작성 (today: 어제→오늘, tomorrow: 오늘→내일)
+    Write {
+        /// 대상: today 또는 tomorrow (기본: tomorrow)
+        #[arg(default_value = "tomorrow")]
+        target: String,
+    },
     /// Jira 이슈를 브라우저에서 열기
     Open {
         /// sprint 또는 scrum (기본: sprint)
@@ -65,7 +69,7 @@ async fn main() -> Result<()> {
         let result = match command {
             Commands::Sprint { json } => cli::cmd_sprint(&client, &config.jira.host, json).await,
             Commands::Scrum { json } => cli::cmd_scrum(&client, json).await,
-            Commands::Write => cli::cmd_write(&client).await,
+            Commands::Write { target } => cli::cmd_write(&client, &target).await,
             Commands::Open { mode } => cli::cmd_open(&client, &config.jira.host, &mode).await,
             Commands::Update => cli::cmd_update().await,
         };

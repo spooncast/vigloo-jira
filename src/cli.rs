@@ -109,28 +109,34 @@ pub async fn cmd_scrum(client: &AcliClient, json: bool) -> Result<()> {
     Ok(())
 }
 
-pub async fn cmd_write(client: &AcliClient) -> Result<()> {
+pub async fn cmd_write(client: &AcliClient, target: &str) -> Result<()> {
     let (days, _) = client
         .fetch_scrum_data(false)
         .await
         .context("스크럼 데이터 조회 실패")?;
 
-    let today = days.iter().find(|d| d.label == "오늘");
-    let tomorrow = days.iter().find(|d| d.label == "내일");
+    let (source_label, target_label, source_desc, target_desc) = match target {
+        "tomorrow" => ("오늘", "내일", "오늘", "내일"),
+        "today" => ("어제", "오늘", "어제", "오늘"),
+        other => anyhow::bail!("알 수 없는 대상: '{}' (today 또는 tomorrow)", other),
+    };
 
-    let today_comment = today.and_then(|d| d.my_comment.as_ref());
-    let tomorrow_key = tomorrow.map(|d| d.key.as_str());
+    let source_day = days.iter().find(|d| d.label == source_label);
+    let target_day = days.iter().find(|d| d.label == target_label);
 
-    match (today_comment, tomorrow_key) {
+    let source_comment = source_day.and_then(|d| d.my_comment.as_ref());
+    let target_key = target_day.map(|d| d.key.as_str());
+
+    match (source_comment, target_key) {
         (Some(comment), Some(key)) if !key.is_empty() => {
             let adf = comment
                 .build_tomorrow_adf()
-                .context("오늘 코멘트에서 테이블을 찾을 수 없습니다")?;
+                .context(format!("{} 코멘트에서 테이블을 찾을 수 없습니다", source_desc))?;
             client.create_comment(key, &adf).await?;
-            println!("내일 스크럼 코멘트를 작성했습니다. ({})", key);
+            println!("{} 스크럼 코멘트를 작성했습니다. ({})", target_desc, key);
         }
-        (None, _) => anyhow::bail!("오늘 스크럼 코멘트가 없습니다"),
-        _ => anyhow::bail!("내일 스크럼 이슈를 찾을 수 없습니다"),
+        (None, _) => anyhow::bail!("{} 스크럼 코멘트가 없습니다", source_desc),
+        _ => anyhow::bail!("{} 스크럼 이슈를 찾을 수 없습니다", target_desc),
     }
 
     Ok(())
