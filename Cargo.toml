@@ -19,3 +19,4 @@ anyhow = "1"
 chrono = "0.4"
 open = "5"
 clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
