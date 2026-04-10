@@ -216,15 +216,17 @@ fn render_subtasks(frame: &mut Frame, app: &App, area: Rect) {
 // -- Scrum mode (D layout: date tabs on top + full-width table) --
 
 fn render_scrum_body(frame: &mut Frame, app: &App, area: Rect) {
-    let has_action = app.today_scrum().and_then(|d| d.my_comment.as_ref()).is_some()
-        && app.tomorrow_scrum().map(|d| !d.key.is_empty()).unwrap_or(false);
+    let has_today_comment = app.today_scrum().and_then(|d| d.my_comment.as_ref()).is_some();
+    let has_tomorrow_key = app.tomorrow_scrum().map(|d| !d.key.is_empty()).unwrap_or(false);
+    let has_action = has_today_comment && has_tomorrow_key;
+    let show_bar = has_action || (has_today_comment && !has_tomorrow_key);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),                          // date tabs
             Constraint::Min(0),                            // comment table
-            Constraint::Length(if has_action { 3 } else { 0 }), // action bar
+            Constraint::Length(if show_bar { 3 } else { 0 }), // action bar
         ])
         .split(area);
 
@@ -233,6 +235,13 @@ fn render_scrum_body(frame: &mut Frame, app: &App, area: Rect) {
 
     if has_action {
         render_scrum_action_bar(frame, app, chunks[2]);
+    } else if has_today_comment && !has_tomorrow_key {
+        let tomorrow_date = app.tomorrow_scrum().map(|d| d.date.as_str()).unwrap_or("");
+        let msg = format!("  내일({}) 스크럼 이슈가 아직 생성되지 않아 자동 작성을 할 수 없습니다.", &tomorrow_date[5..]);
+        let bar = Paragraph::new(msg)
+            .style(Style::default().fg(Color::Yellow))
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
+        frame.render_widget(bar, chunks[2]);
     }
 }
 
