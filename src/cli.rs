@@ -1,14 +1,18 @@
 use std::process::Command;
 
 use anyhow::{Context, Result};
+use indicatif::ProgressBar;
 
 use crate::acli::AcliClient;
 
 pub async fn cmd_sprint(client: &AcliClient, _host: &str, json: bool) -> Result<()> {
-    let (sprint, work_items, warnings) = client
-        .fetch_all_data(false)
-        .await
-        .context("스프린트 데이터 조회 실패")?;
+    let spinner = ProgressBar::new_spinner().with_message("Loading sprint data...");
+    spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+
+    let result = client.fetch_all_data(false).await;
+    spinner.finish_and_clear();
+
+    let (sprint, work_items, warnings) = result.context("스프린트 데이터 조회 실패")?;
 
     if json {
         let output = serde_json::json!({
@@ -64,10 +68,13 @@ pub async fn cmd_sprint(client: &AcliClient, _host: &str, json: bool) -> Result<
 }
 
 pub async fn cmd_scrum(client: &AcliClient, json: bool) -> Result<()> {
-    let (days, warnings) = client
-        .fetch_scrum_data(false)
-        .await
-        .context("스크럼 데이터 조회 실패")?;
+    let spinner = ProgressBar::new_spinner().with_message("Loading scrum data...");
+    spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+
+    let result = client.fetch_scrum_data(false).await;
+    spinner.finish_and_clear();
+
+    let (days, warnings) = result.context("스크럼 데이터 조회 실패")?;
 
     if json {
         let output = serde_json::json!({
@@ -110,10 +117,13 @@ pub async fn cmd_scrum(client: &AcliClient, json: bool) -> Result<()> {
 }
 
 pub async fn cmd_write(client: &AcliClient, target: &str) -> Result<()> {
-    let (days, _) = client
-        .fetch_scrum_data(false)
-        .await
-        .context("스크럼 데이터 조회 실패")?;
+    let spinner = ProgressBar::new_spinner().with_message("Writing scrum comment...");
+    spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+
+    let result = client.fetch_scrum_data(false).await;
+    spinner.finish_and_clear();
+
+    let (days, _) = result.context("스크럼 데이터 조회 실패")?;
 
     let (source_label, target_label, source_desc, target_desc) = match target {
         "tomorrow" => ("오늘", "내일", "오늘", "내일"),
