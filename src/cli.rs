@@ -155,19 +155,25 @@ pub async fn cmd_write(client: &AcliClient, target: &str) -> Result<()> {
 pub async fn cmd_open(client: &AcliClient, host: &str, mode: &str) -> Result<()> {
     match mode {
         "sprint" => {
-            let (sprint, _, _) = client
-                .fetch_all_data(false)
-                .await
-                .context("스프린트 데이터 조회 실패")?;
+            let spinner = ProgressBar::new_spinner().with_message("Loading sprint data...");
+            spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+
+            let result = client.fetch_all_data(false).await;
+            spinner.finish_and_clear();
+
+            let (sprint, _, _) = result.context("스프린트 데이터 조회 실패")?;
             let url = format!("{}/secure/RapidBoard.jspa?rapidView={}", host, sprint.id);
             println!("Opening: {}", url);
             open::that(&url).context("브라우저 열기 실패")?;
         }
         "scrum" => {
-            let (days, _) = client
-                .fetch_scrum_data(false)
-                .await
-                .context("스크럼 데이터 조회 실패")?;
+            let spinner = ProgressBar::new_spinner().with_message("Loading scrum data...");
+            spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+
+            let result = client.fetch_scrum_data(false).await;
+            spinner.finish_and_clear();
+
+            let (days, _) = result.context("스크럼 데이터 조회 실패")?;
             let today = days.iter().find(|d| d.label == "오늘");
             match today {
                 Some(day) if !day.key.is_empty() => {
