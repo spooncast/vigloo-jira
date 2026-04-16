@@ -1,0 +1,6 @@
+### claude ###
+# settings
+settings.local.json
+
+# plugins
+metis/
