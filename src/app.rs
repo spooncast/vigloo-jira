@@ -70,6 +70,7 @@ impl App {
         self.scrum_scroll = 0;
         self.loading = false;
         self.error = None;
+        self.warnings.clear();
     }
 
     pub fn add_warning(&mut self, msg: String) {

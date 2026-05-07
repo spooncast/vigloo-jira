@@ -329,9 +329,9 @@ impl AcliClient {
             self.fetch_scrum_day(&epic_key, yesterday, "어제"),
         );
 
-        let mut tomorrow_scrum = tomorrow_result.context("내일 스크럼 데이 조회 실패")?;
-        let mut today_scrum = today_result.context("오늘 스크럼 데이 조회 실패")?;
-        let mut yesterday_scrum = yesterday_result.context("어제 스크럼 데이 조회 실패")?;
+        let mut tomorrow_scrum = day_or_warn(tomorrow_result, tomorrow, "내일", &mut warnings);
+        let mut today_scrum = day_or_warn(today_result, today, "오늘", &mut warnings);
+        let mut yesterday_scrum = day_or_warn(yesterday_result, yesterday, "어제", &mut warnings);
 
         // Parallel: fetch comments
         let tomorrow_key = tomorrow_scrum.key.clone();
@@ -391,6 +391,32 @@ impl AcliClient {
         }
 
         Ok(())
+    }
+}
+
+fn day_or_warn(
+    result: Result<ScrumDay>,
+    date: NaiveDate,
+    label: &str,
+    warnings: &mut Vec<String>,
+) -> ScrumDay {
+    match result {
+        Ok(d) => d,
+        Err(e) => {
+            warnings.push(format!(
+                "{} ({}) 스크럼 데이 조회 실패: {:#}",
+                label,
+                date.format("%Y-%m-%d"),
+                e
+            ));
+            ScrumDay {
+                key: String::new(),
+                label: label.to_string(),
+                date: date.format("%Y-%m-%d").to_string(),
+                status: "조회 실패".to_string(),
+                my_comment: None,
+            }
+        }
     }
 }
 

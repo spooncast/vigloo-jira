@@ -9,12 +9,15 @@ use ratatui::{
 use crate::app::{App, Mode, Panel};
 
 pub fn render(frame: &mut Frame, app: &App) {
+    let warnings_height = warnings_area_height(app);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // header (mode tabs)
-            Constraint::Min(0),   // body
-            Constraint::Length(1), // footer
+            Constraint::Length(3),                // header (mode tabs)
+            Constraint::Min(0),                   // body
+            Constraint::Length(warnings_height),  // warnings
+            Constraint::Length(1),                // footer
         ])
         .split(frame.area());
 
@@ -35,7 +38,50 @@ pub fn render(frame: &mut Frame, app: &App) {
         }
     }
 
-    render_footer(frame, app, chunks[2]);
+    if warnings_height > 0 {
+        render_warnings(frame, app, chunks[2]);
+    }
+
+    render_footer(frame, app, chunks[3]);
+}
+
+const MAX_VISIBLE_WARNINGS: usize = 3;
+
+fn warnings_area_height(app: &App) -> u16 {
+    if app.warnings.is_empty() {
+        0
+    } else {
+        let visible = app.warnings.len().min(MAX_VISIBLE_WARNINGS) as u16;
+        visible + 2 // borders
+    }
+}
+
+fn render_warnings(frame: &mut Frame, app: &App, area: Rect) {
+    let lines: Vec<Line> = app
+        .warnings
+        .iter()
+        .take(MAX_VISIBLE_WARNINGS)
+        .map(|w| {
+            Line::from(vec![
+                Span::styled("  ! ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(w.as_str(), Style::default().fg(Color::Yellow)),
+            ])
+        })
+        .collect();
+
+    let title = if app.warnings.len() > MAX_VISIBLE_WARNINGS {
+        format!(" Warnings ({} more) ", app.warnings.len() - MAX_VISIBLE_WARNINGS)
+    } else {
+        " Warnings ".to_string()
+    };
+
+    let para = Paragraph::new(lines).block(
+        Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow)),
+    );
+    frame.render_widget(para, area);
 }
 
 // -- Header --
