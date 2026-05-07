@@ -309,6 +309,21 @@ impl AcliClient {
             }
         }
 
+        let (mut days, mut warnings) = self.fetch_scrum_data_inner().await?;
+
+        // 캐시된 에픽 키가 만료/삭제된 경우(JQL parse 실패) 한 번만 자동 재시도.
+        if warnings_indicate_stale_epic(&warnings) {
+            cache::invalidate_epic_key(&self.project);
+            let (d2, w2) = self.fetch_scrum_data_inner().await?;
+            days = d2;
+            warnings = w2;
+        }
+
+        let _ = cache::save_scrum_data_cache(&self.project, &days, &warnings);
+        Ok((days, warnings))
+    }
+
+    async fn fetch_scrum_data_inner(&self) -> Result<(Vec<ScrumDay>, Vec<String>)> {
         let mut warnings = Vec::new();
 
         // Parallel: epic key (cached) + account id (cached)
@@ -369,7 +384,6 @@ impl AcliClient {
         }
 
         let days = vec![yesterday_scrum, today_scrum, tomorrow_scrum];
-        let _ = cache::save_scrum_data_cache(&self.project, &days, &warnings);
         Ok((days, warnings))
     }
 
@@ -392,6 +406,10 @@ impl AcliClient {
 
         Ok(())
     }
+}
+
+fn warnings_indicate_stale_epic(warnings: &[String]) -> bool {
+    warnings.iter().any(|w| w.contains("failed to parse JQL"))
 }
 
 fn day_or_warn(

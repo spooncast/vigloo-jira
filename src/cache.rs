@@ -73,6 +73,13 @@ pub fn load_cached_epic_key(project: &str) -> Option<String> {
     }
 }
 
+pub fn invalidate_epic_key(project: &str) {
+    let now = Local::now();
+    let year = now.year();
+    let quarter = (now.month() - 1) / 3 + 1;
+    let _ = fs::remove_file(epic_path(project, year, quarter));
+}
+
 pub fn save_epic_key_cache(project: &str, epic_key: &str) -> Result<()> {
     let now = Local::now();
     let year = now.year();
