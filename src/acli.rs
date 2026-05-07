@@ -199,10 +199,10 @@ impl AcliClient {
     async fn find_scrum_epic(&self) -> Result<String> {
         let now = Local::now();
         let quarter = (now.month() - 1) / 3 + 1;
-        let keyword = format!("{} {}Q", now.year(), quarter);
+        let year = now.year();
         let jql = format!(
-            "project = {} AND issuetype = Epic AND summary ~ \"{}\" AND summary ~ \"Daily scrum\"",
-            self.project, keyword
+            "project = {} AND issuetype = Epic AND summary ~ \"Daily scrum\"",
+            self.project
         );
 
         let output = Command::new("acli")
@@ -219,10 +219,17 @@ impl AcliClient {
         let issues: Vec<IssueRaw> = serde_json::from_slice(&output.stdout)
             .context("Failed to parse scrum epic response")?;
 
+        let year_str = year.to_string();
+        let quarter_str = format!("{}Q", quarter);
+
         issues
-            .first()
+            .iter()
+            .find(|i| {
+                let s = &i.fields.summary;
+                s.contains(&year_str) && s.contains(&quarter_str)
+            })
             .map(|i| i.key.clone())
-            .with_context(|| format!("No Daily scrum epic found for {}", keyword))
+            .with_context(|| format!("No Daily scrum epic found for {} {}", year, quarter_str))
     }
 
     async fn fetch_scrum_day(&self, epic_key: &str, date: NaiveDate, label: &str) -> Result<ScrumDay> {
