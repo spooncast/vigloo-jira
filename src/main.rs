@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
         let result = match command {
             Commands::Sprint { json } => cli::cmd_sprint(&client, &config.jira.host, json).await,
             Commands::Scrum { json } => cli::cmd_scrum(&client, json).await,
-            Commands::Write { target } => cli::cmd_write(&client, &target).await,
+            Commands::Write { target } => cli::cmd_write(&client, &config.jira.host, &target).await,
             Commands::Open { mode } => cli::cmd_open(&client, &config.jira.host, &mode).await,
             Commands::Update => cli::cmd_update().await,
         };

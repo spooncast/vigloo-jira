@@ -116,7 +116,7 @@ pub async fn cmd_scrum(client: &AcliClient, json: bool) -> Result<()> {
     Ok(())
 }
 
-pub async fn cmd_write(client: &AcliClient, target: &str) -> Result<()> {
+pub async fn cmd_write(client: &AcliClient, host: &str, target: &str) -> Result<()> {
     let spinner = ProgressBar::new_spinner().with_message("Writing scrum comment...");
     spinner.enable_steady_tick(std::time::Duration::from_millis(80));
 
@@ -144,12 +144,31 @@ pub async fn cmd_write(client: &AcliClient, target: &str) -> Result<()> {
                 .context(format!("{} 코멘트에서 테이블을 찾을 수 없습니다", source_desc))?;
             client.create_comment(key, &adf).await?;
             println!("{} 스크럼 코멘트를 작성했습니다. ({})", target_desc, key);
+
+            let url = format!("{}/browse/{}", host, key);
+            if prompt_open(&url)? {
+                println!("Opening: {}", url);
+                open::that(&url).context("브라우저 열기 실패")?;
+            }
         }
         (None, _) => anyhow::bail!("{} 스크럼 코멘트가 없습니다", source_desc),
         _ => anyhow::bail!("{} 스크럼 이슈를 찾을 수 없습니다", target_desc),
     }
 
     Ok(())
+}
+
+fn prompt_open(url: &str) -> Result<bool> {
+    use std::io::{self, BufRead, Write};
+    print!("브라우저에서 열까요? {} [Y/n]: ", url);
+    io::stdout().flush().ok();
+    let mut line = String::new();
+    let stdin = io::stdin();
+    if stdin.lock().read_line(&mut line)? == 0 {
+        return Ok(true);
+    }
+    let answer = line.trim();
+    Ok(answer.is_empty() || answer.eq_ignore_ascii_case("y"))
 }
 
 pub async fn cmd_open(client: &AcliClient, host: &str, mode: &str) -> Result<()> {
