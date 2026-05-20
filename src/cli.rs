@@ -120,10 +120,14 @@ pub async fn cmd_write(client: &AcliClient, host: &str, target: &str) -> Result<
     let spinner = ProgressBar::new_spinner().with_message("Writing scrum comment...");
     spinner.enable_steady_tick(std::time::Duration::from_millis(80));
 
-    let result = client.fetch_scrum_data(false).await;
+    let result = client.fetch_scrum_data(true).await;
     spinner.finish_and_clear();
 
-    let (days, _) = result.context("스크럼 데이터 조회 실패")?;
+    let (days, warnings) = result.context("스크럼 데이터 조회 실패")?;
+
+    for w in &warnings {
+        eprintln!("Warning: {}", w);
+    }
 
     let (source_label, target_label, source_desc, target_desc) = match target {
         "tomorrow" => ("오늘", "내일", "오늘", "내일"),

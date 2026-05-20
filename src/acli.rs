@@ -253,7 +253,7 @@ impl AcliClient {
         let issues: Vec<IssueRaw> = serde_json::from_slice(&output.stdout)
             .context(format!("{} ({}) 스크럼 데이 응답 파싱 실패", label, date_str))?;
 
-        match issues.first() {
+        match issues.iter().find(|i| i.fields.summary.contains(&date_str)) {
             Some(issue) => Ok(ScrumDay {
                 key: issue.key.clone(),
                 label: label.to_string(),
@@ -261,7 +261,7 @@ impl AcliClient {
                 status: issue.fields.status.name.clone(),
                 my_comment: None,
             }),
-            None => Ok(ScrumDay {
+            _ => Ok(ScrumDay {
                 key: String::new(),
                 label: label.to_string(),
                 date: date_str,
