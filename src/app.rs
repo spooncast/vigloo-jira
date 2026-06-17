@@ -1,5 +1,8 @@
 use crate::model::{ScrumDay, Sprint, WorkItem};
 
+/// CLIP 워크플로 서브태스크 상태. 모두 global transition 이라 현재 상태와 무관하게 전이 가능.
+pub const SUBTASK_STATUSES: [&str; 4] = ["해야 할 일", "진행 중", "검토 중", "완료"];
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Mode {
     Sprint,
@@ -32,6 +35,9 @@ pub struct App {
     pub selected_scrum_day: usize,
     pub scrum_scroll: u16,
     pub confirm_write: bool,
+
+    // 상태 변경 피커: Some(idx) = 열림(idx 강조), None = 닫힘
+    pub status_picker: Option<usize>,
 }
 
 impl App {
@@ -51,6 +57,7 @@ impl App {
             selected_scrum_day: 0,
             scrum_scroll: 0,
             confirm_write: false,
+            status_picker: None,
         }
     }
 
@@ -225,5 +232,63 @@ impl App {
                 })
             }
         }
+    }
+
+    // -- 상태 변경 피커 --
+
+    /// Sprint 모드 Right 패널에서 선택된 서브태스크가 있을 때만 피커를 연다.
+    /// 시작 강조 위치는 현재 상태로 맞춘다(없으면 첫 항목).
+    pub fn open_status_picker(&mut self) {
+        if self.mode != Mode::Sprint || self.active_panel != Panel::Right {
+            return;
+        }
+        let Some(current) = self
+            .current_subtasks()
+            .get(self.selected_subtask)
+            .map(|s| s.status.clone())
+        else {
+            return;
+        };
+
+        let idx = SUBTASK_STATUSES
+            .iter()
+            .position(|s| *s == current)
+            .unwrap_or(0);
+        self.status_picker = Some(idx);
+    }
+
+    pub fn close_status_picker(&mut self) {
+        self.status_picker = None;
+    }
+
+    pub fn status_picker_up(&mut self) {
+        if let Some(idx) = self.status_picker {
+            if idx > 0 {
+                self.status_picker = Some(idx - 1);
+            }
+        }
+    }
+
+    pub fn status_picker_down(&mut self) {
+        if let Some(idx) = self.status_picker {
+            if idx + 1 < SUBTASK_STATUSES.len() {
+                self.status_picker = Some(idx + 1);
+            }
+        }
+    }
+
+    /// 현재 강조된 상태를 로컬에 낙관적으로 반영하고 전이 이벤트를 만든다.
+    /// 실제 전이는 백그라운드에서 수행, 실패 시에만 에러로 되돌린다.
+    pub fn confirm_status_pick(&mut self) -> Option<crate::event::AppEvent> {
+        let idx = self.status_picker.take()?;
+        let status = SUBTASK_STATUSES.get(idx).copied()?;
+
+        let wi = self.selected_work_item;
+        let si = self.selected_subtask;
+        let sub = self.work_items.get_mut(wi)?.subtasks.get_mut(si)?;
+        let key = sub.key.clone();
+        sub.status = status.to_string();
+
+        Some(crate::event::AppEvent::Transition { key, status: status.to_string() })
     }
 }

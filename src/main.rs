@@ -195,6 +195,18 @@ async fn run_app(
                     }
                 }
             }
+            AppEvent::Transition { key, status } => {
+                // 로컬은 이미 낙관적으로 반영됨. 백그라운드 전이만 수행.
+                let c = client.clone();
+                let tx2 = tx.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = c.transition_subtask(&key, &status).await {
+                        let _ = tx2.send(DataPayload::Error(
+                            format!("상태 변경 실패 ({}): {:#}", key, e),
+                        ));
+                    }
+                });
+            }
             AppEvent::None => {}
         }
     }

@@ -406,6 +406,28 @@ impl AcliClient {
 
         Ok(())
     }
+
+    pub async fn transition_subtask(&self, key: &str, status: &str) -> Result<()> {
+        let output = Command::new("acli")
+            .args([
+                "jira", "workitem", "transition",
+                "--key", key,
+                "--status", status,
+                "--yes",
+            ])
+            .output()
+            .await
+            .context("Failed to run acli workitem transition")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Transition failed for {} -> {}: {}", key, status, stderr);
+        }
+
+        // 서버 상태가 바뀌었으니 스프린트 데이터 캐시는 stale. 다음 로드에서 재페치.
+        cache::invalidate_sprint_data(self.board_id);
+        Ok(())
+    }
 }
 
 fn warnings_indicate_stale_epic(warnings: &[String]) -> bool {
