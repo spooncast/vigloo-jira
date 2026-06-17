@@ -144,6 +144,10 @@ pub fn load_cached_sprint_data(board_id: u64) -> Option<(Sprint, Vec<WorkItem>, 
     Some((cached.sprint, cached.work_items, cached.warnings))
 }
 
+pub fn invalidate_sprint_data(board_id: u64) {
+    let _ = fs::remove_file(sprint_data_path(board_id));
+}
+
 pub fn save_sprint_data_cache(
     board_id: u64,
     sprint: &Sprint,

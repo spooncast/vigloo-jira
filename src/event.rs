@@ -9,6 +9,7 @@ pub enum AppEvent {
     OpenLink(String),
     SwitchMode(Mode),
     WriteScrum,
+    Transition { key: String, status: String },
     None,
 }
 
@@ -46,6 +47,23 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
                 }
             }
 
+            // Status picker mode: ↑↓ 이동 / Enter 확정 / Esc 취소, 나머지 무시
+            if app.status_picker.is_some() {
+                match key.code {
+                    KeyCode::Up => app.status_picker_up(),
+                    KeyCode::Down => app.status_picker_down(),
+                    KeyCode::Esc => app.close_status_picker(),
+                    KeyCode::Enter => {
+                        if let Some(event) = app.confirm_status_pick() {
+                            return Ok(event);
+                        }
+                        app.close_status_picker();
+                    }
+                    _ => {}
+                }
+                return Ok(AppEvent::None);
+            }
+
             match key.code {
                 KeyCode::Char('q') => return Ok(AppEvent::Quit),
                 KeyCode::Char('r') => return Ok(AppEvent::Refresh),
@@ -69,6 +87,7 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<AppEvent> {
                         app.confirm_write = true;
                     }
                 }
+                KeyCode::Char('s') => app.open_status_picker(),
                 KeyCode::Esc => app.go_back(),
                 KeyCode::Enter => {
                     if let Some(event) = app.handle_enter() {

@@ -2,11 +2,11 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs},
     Frame,
 };
 
-use crate::app::{App, Mode, Panel};
+use crate::app::{App, Mode, Panel, SUBTASK_STATUSES};
 
 pub fn render(frame: &mut Frame, app: &App) {
     let warnings_height = warnings_area_height(app);
@@ -43,6 +43,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 
     render_footer(frame, app, chunks[3]);
+
+    // 오버레이: 다른 위젯 위에 마지막으로 그린다
+    if let Some(idx) = app.status_picker {
+        render_status_picker(frame, app, idx);
+    }
 }
 
 const MAX_VISIBLE_WARNINGS: usize = 3;
@@ -458,6 +463,10 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         Mode::Sprint => {
             spans.push(Span::styled("Tab", Style::default().fg(Color::Cyan)));
             spans.push(Span::raw(": Panel  "));
+            if app.active_panel == Panel::Right {
+                spans.push(Span::styled("s", Style::default().fg(Color::Green)));
+                spans.push(Span::raw(": 상태변경  "));
+            }
             spans.push(Span::styled("2", Style::default().fg(Color::Yellow)));
             spans.push(Span::raw(": Scrum  "));
         }
@@ -476,6 +485,55 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
     let footer = Paragraph::new(Line::from(spans));
     frame.render_widget(footer, area);
+}
+
+// -- Status picker overlay --
+
+fn render_status_picker(frame: &mut Frame, app: &App, idx: usize) {
+    let area = centered_rect(44, SUBTASK_STATUSES.len() as u16 + 2, frame.area());
+    frame.render_widget(Clear, area);
+
+    let subtask = app.current_subtasks().get(app.selected_subtask);
+    let current_status = subtask.map(|s| s.status.as_str()).unwrap_or("");
+    let key = subtask.map(|s| s.key.as_str()).unwrap_or("");
+
+    let items: Vec<ListItem> = SUBTASK_STATUSES
+        .iter()
+        .enumerate()
+        .map(|(i, st)| {
+            let marker = if i == idx { "▸ " } else { "  " };
+            let suffix = if *st == current_status { "  (현재)" } else { "" };
+            let line = Line::from(vec![
+                Span::raw(marker),
+                Span::styled(format!("{}{}", st, suffix), Style::default().fg(status_color(st))),
+            ]);
+            let style = if i == idx {
+                Style::default().bg(Color::Blue).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            ListItem::new(line).style(style)
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .title(format!(" 상태 변경: {} (↑↓ Enter / Esc) ", key))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+    frame.render_widget(list, area);
+}
+
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let w = width.min(area.width);
+    let h = height.min(area.height);
+    Rect {
+        x: area.x + (area.width.saturating_sub(w)) / 2,
+        y: area.y + (area.height.saturating_sub(h)) / 2,
+        width: w,
+        height: h,
+    }
 }
 
 // -- Helpers --
