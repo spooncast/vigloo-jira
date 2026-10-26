@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "tui-design-skill": {
+      "source": {
+        "source": "github",
+        "repo": "pageton/tui-design-skill"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "tui-design@tui-design-skill": true
+  }
+}
