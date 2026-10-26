@@ -139,24 +139,29 @@ pub async fn cmd_write(client: &AcliClient, host: &str, target: &str) -> Result<
     let target_day = days.iter().find(|d| d.label == target_label);
 
     let source_comment = source_day.and_then(|d| d.my_comment.as_ref());
-    let target_key = target_day.map(|d| d.key.as_str());
+    let Some(key) = target_day.map(|d| d.key.as_str()).filter(|k| !k.is_empty()) else {
+        anyhow::bail!("{} 스크럼 이슈를 찾을 수 없습니다", target_desc);
+    };
 
-    match (source_comment, target_key) {
-        (Some(comment), Some(key)) if !key.is_empty() => {
-            let adf = comment
-                .build_tomorrow_adf()
-                .context(format!("{} 코멘트에서 테이블을 찾을 수 없습니다", source_desc))?;
-            client.create_comment(key, &adf).await?;
-            println!("{} 스크럼 코멘트를 작성했습니다. ({})", target_desc, key);
+    // Writing can fail (e.g. day off → no source comment); still offer to open the target page.
+    let written = async {
+        let comment = source_comment.context(format!("{} 스크럼 코멘트가 없습니다", source_desc))?;
+        let adf = comment
+            .build_tomorrow_adf()
+            .context(format!("{} 코멘트에서 테이블을 찾을 수 없습니다", source_desc))?;
+        client.create_comment(key, &adf).await
+    }
+    .await;
 
-            let url = format!("{}/browse/{}", host, key);
-            if prompt_open(&url)? {
-                println!("Opening: {}", url);
-                open::that(&url).context("브라우저 열기 실패")?;
-            }
-        }
-        (None, _) => anyhow::bail!("{} 스크럼 코멘트가 없습니다", source_desc),
-        _ => anyhow::bail!("{} 스크럼 이슈를 찾을 수 없습니다", target_desc),
+    match written {
+        Ok(()) => println!("{} 스크럼 코멘트를 작성했습니다. ({})", target_desc, key),
+        Err(e) => eprintln!("{:#} — 작성을 건너뜁니다. ({})", e, key),
+    }
+
+    let url = format!("{}/browse/{}", host, key);
+    if prompt_open(&url)? {
+        println!("Opening: {}", url);
+        open::that(&url).context("브라우저 열기 실패")?;
     }
 
     Ok(())
