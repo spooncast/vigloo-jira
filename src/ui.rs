@@ -508,7 +508,7 @@ fn render_status_picker(frame: &mut Frame, app: &App, idx: usize) {
                 Span::styled(format!("{}{}", st, suffix), Style::default().fg(status_color(st))),
             ]);
             let style = if i == idx {
-                Style::default().bg(Color::Blue).add_modifier(Modifier::BOLD)
+                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -541,7 +541,7 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
 fn status_color(status: &str) -> Color {
     match status {
         "진행 중" => Color::Yellow,
-        "검토 중" => Color::Blue,
+        "검토 중" => Color::Magenta,
         "완료" => Color::Green,
         _ => Color::Gray,
     }
