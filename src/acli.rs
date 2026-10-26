@@ -55,6 +55,7 @@ impl AcliClient {
             .args([
                 "jira", "board", "list-sprints",
                 "--id", &self.board_id.to_string(),
+                "--state", "active",
                 "--json",
             ])
             .output()
